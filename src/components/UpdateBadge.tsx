@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { ArrowUpCircle } from 'lucide-react';
 import {
   Dialog,
@@ -25,22 +25,22 @@ export function UpdateBadge() {
   const [versionInfo, setVersionInfo] = useState<VersionCheck | null>(null);
   const [open, setOpen] = useState(false);
 
-  const checkForUpdate = useCallback(async () => {
-    try {
-      const res = await fetch('/api/version/check');
-      if (!res.ok) return;
-      const data: VersionCheck = await res.json();
-      setVersionInfo(data);
-    } catch {
-      // Silently ignore — non-critical
-    }
-  }, []);
-
   useEffect(() => {
-    checkForUpdate();
-    const iv = setInterval(checkForUpdate, CHECK_INTERVAL_MS);
-    return () => clearInterval(iv);
-  }, [checkForUpdate]);
+    const ac = new AbortController();
+    const check = async () => {
+      try {
+        const res = await fetch('/api/version/check', { signal: ac.signal });
+        if (!res.ok) return;
+        const data: VersionCheck = await res.json();
+        setVersionInfo(data);
+      } catch {
+        // Silently ignore — aborted or network error
+      }
+    };
+    check();
+    const iv = setInterval(check, CHECK_INTERVAL_MS);
+    return () => { ac.abort(); clearInterval(iv); };
+  }, []);
 
   if (!versionInfo?.updateAvailable || !versionInfo.latest) return null;
 

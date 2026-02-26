@@ -7,7 +7,7 @@
  */
 
 import { Hono } from 'hono';
-import { execSync } from 'node:child_process';
+import { exec } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -26,6 +26,7 @@ interface VersionCache {
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 let cache: VersionCache | null = null;
 
+/** Compare two semver strings. Returns negative if a < b, positive if a > b, 0 if equal. */
 function compareSemver(a: string, b: string): number {
   const pa = a.split('.').map(Number);
   const pb = b.split('.').map(Number);
@@ -35,42 +36,46 @@ function compareSemver(a: string, b: string): number {
   return 0;
 }
 
-function fetchLatestTag(cwd: string): string | null {
+/** Run a shell command asynchronously and return stdout. */
+function execAsync(command: string, cwd: string, timeoutMs: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    exec(command, { cwd, timeout: timeoutMs }, (err, stdout) => {
+      if (err) return reject(err);
+      resolve(stdout);
+    });
+  });
+}
+
+/** Parse semver tags from git output lines. */
+function parseTags(output: string): string[] {
   const semverRegex = /v?(\d+\.\d+\.\d+)$/;
   const versions: string[] = [];
+  for (const line of output.split('\n')) {
+    const match = semverRegex.exec(line.trim());
+    if (match && !versions.includes(match[1])) {
+      versions.push(match[1]);
+    }
+  }
+  return versions;
+}
+
+/** Fetch the latest semver tag from remote, falling back to local tags. */
+async function fetchLatestTag(cwd: string): Promise<string | null> {
+  let versions: string[] = [];
 
   // Try remote first
   try {
-    const output = execSync('git ls-remote --tags origin', {
-      cwd,
-      stdio: 'pipe',
-      timeout: 10_000,
-    }).toString();
-
-    for (const line of output.split('\n')) {
-      const match = semverRegex.exec(line.trim());
-      if (match && !versions.includes(match[1])) {
-        versions.push(match[1]);
-      }
-    }
+    const output = await execAsync('git ls-remote --tags origin', cwd, 10_000);
+    versions = parseTags(output);
   } catch {
-    // Remote unreachable — try local tags
+    // Remote unreachable — fall through to local
   }
 
+  // Fallback to local tags
   if (versions.length === 0) {
     try {
-      const output = execSync('git tag -l', {
-        cwd,
-        stdio: 'pipe',
-        timeout: 5_000,
-      }).toString();
-
-      for (const line of output.split('\n')) {
-        const match = semverRegex.exec(line.trim());
-        if (match && !versions.includes(match[1])) {
-          versions.push(match[1]);
-        }
-      }
+      const output = await execAsync('git tag -l', cwd, 5_000);
+      versions = parseTags(output);
     } catch {
       return null;
     }
@@ -83,7 +88,7 @@ function fetchLatestTag(cwd: string): string | null {
 
 const app = new Hono();
 
-app.get('/api/version/check', rateLimitGeneral, (c) => {
+app.get('/api/version/check', rateLimitGeneral, async (c) => {
   const now = Date.now();
   const cwd = resolve(__dirname, '../..');
 
@@ -96,8 +101,8 @@ app.get('/api/version/check', rateLimitGeneral, (c) => {
     });
   }
 
-  // Resolve latest tag
-  const latest = fetchLatestTag(cwd);
+  // Resolve latest tag (async — doesn't block the event loop)
+  const latest = await fetchLatestTag(cwd);
   if (!latest) {
     return c.json({
       current: pkg.version,
