@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest';
 
-/** Same regex used in ChatContext.tsx buildVoiceFallbackText */
+/** Must match the regex in ChatContext.tsx buildVoiceFallbackText */
 const SPEAKABLE_RE = /\p{L}{3,}/u;
 
 describe('voice fallback speakability check', () => {

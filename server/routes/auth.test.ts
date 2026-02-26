@@ -82,6 +82,21 @@ describe('auth routes', () => {
       expect(res.status).toBe(401);
     });
 
+    it('accepts valid password with scrypt hash', async () => {
+      // Pre-computed scrypt hash for 'test-password' (generated via hashPassword)
+      const hash = '2b49a0429e647f74418e40e49bfe701257b91d64a825f921fd20986defa6508f:68a86fadbec3e62c603639333693f5c64e5a5788fb4228b7f5d5dfd5804b024cb42dab05ea276c2f8a49e597ffff2f3bd1533612fbd76a4bd22019c54f794173';
+      const app = await buildApp({ passwordHash: hash });
+      const res = await app.request('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: 'test-password' }),
+      });
+      expect(res.status).toBe(200);
+      const json = (await res.json()) as Record<string, unknown>;
+      expect(json.ok).toBe(true);
+      expect(res.headers.get('set-cookie')).toContain('nerve_session');
+    });
+
     it('returns 401 for invalid password', async () => {
       const app = await buildApp();
       const res = await app.request('/api/auth/login', {
