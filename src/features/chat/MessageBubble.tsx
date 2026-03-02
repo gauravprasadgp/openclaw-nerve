@@ -79,6 +79,44 @@ function MessageBubbleInner({ msg, index, isCollapsed, isMemoryCollapsed, memory
   const missionTime = formatMissionTime(msg.timestamp, firstMessageTime ?? null);
   const isCollapsible = isMessageCollapsible(msg);
   const [copied, setCopied] = useState(false);
+  const [sysExpanded, setSysExpanded] = useState(false);
+
+  // useCallback must be called unconditionally (before any early returns)
+  const handleCopy = useCallback(async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(msg.rawText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (err) {
+      console.warn('Clipboard copy failed', err);
+    }
+  }, [msg.rawText]);
+
+  // System notification strip (subagent/cron completions) — collapsible, not a full bubble
+  if (msg.isSystemNotification) {
+    const statusIcon = msg.systemLabel?.includes('failed') || msg.systemLabel?.includes('timed out') ? '⚠' : '⚡';
+    return (
+      <div className="group relative border-b border-border/20">
+        <button
+          type="button"
+          onClick={() => setSysExpanded(!sysExpanded)}
+          aria-expanded={sysExpanded}
+          className="w-full flex items-center gap-2 px-4 py-1.5 text-[10px] text-muted-foreground hover:bg-secondary/50 transition-colors cursor-pointer bg-transparent border-0"
+        >
+          <span className={`shrink-0 w-3 transition-transform ${sysExpanded ? 'rotate-90' : ''}`}>›</span>
+          <span>{statusIcon}</span>
+          <span className="font-mono tracking-wide uppercase truncate text-info">{msg.systemLabel || 'System notification'}</span>
+          <span className="ml-auto text-[9px] text-info/40 shrink-0">{timeStr}</span>
+        </button>
+        {sysExpanded && (
+          <div className="px-8 py-2 text-[11px] text-muted-foreground bg-secondary/30 border-t border-border/20 max-h-[300px] overflow-y-auto">
+            <pre className="whitespace-pre-wrap font-mono text-[10px] leading-relaxed">{msg.rawText}</pre>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   const { memories, content: cleanContent } = isUser ? extractMemories(msg.rawText) : { memories: null, content: msg.rawText };
   const rawForDisplay = isUser && memories ? cleanContent : msg.rawText;
@@ -107,17 +145,6 @@ function MessageBubbleInner({ msg, index, isCollapsed, isMemoryCollapsed, memory
     : '';
 
   const memoryCollapsedKey = memoryKey ?? `mem-${msg.msgId || msg.tempId || index}`;
-
-  const handleCopy = useCallback(async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      await navigator.clipboard.writeText(msg.rawText);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch (err) {
-      console.warn('Clipboard copy failed', err);
-    }
-  }, [msg.rawText]);
 
   // Visual indicator for current search match
   const matchClass = isCurrentMatch ? 'ring-2 ring-primary/60 ring-offset-1 ring-offset-background' : '';
@@ -332,6 +359,10 @@ export const MessageBubble = memo(MessageBubbleInner, (prev, next) => {
   // Content changes (for streaming updates)
   if (prev.msg.rawText !== next.msg.rawText) return false;
   if (prev.msg.html !== next.msg.html) return false;
+  
+  // System notification fields
+  if (prev.msg.isSystemNotification !== next.msg.isSystemNotification) return false;
+  if (prev.msg.systemLabel !== next.msg.systemLabel) return false;
   
   // Thinking state
   if (prev.msg.isThinking !== next.msg.isThinking) return false;
