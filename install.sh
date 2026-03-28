@@ -1191,7 +1191,7 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
         if [[ "$(echo "$answer" | tr "[:upper:]" "[:lower:]")" != "n" ]]; then
           setup_launchd
         else
-          ok "Skipped — start manually with: npm start"
+          ok "Skipped — start manually with: cd ${INSTALL_DIR} && npm run prod"
         fi
       else
         info "Cannot read input — installing launchd service by default"
@@ -1229,7 +1229,7 @@ elif command -v systemctl &>/dev/null; then
         if [[ "$(echo "$answer" | tr "[:upper:]" "[:lower:]")" != "n" ]]; then
           setup_systemd
         else
-          ok "Skipped — start manually with: npm start"
+          ok "Skipped — start manually with: cd ${INSTALL_DIR} && npm run prod"
         fi
       else
         info "Cannot read input — installing systemd service by default"
@@ -1301,7 +1301,7 @@ else
     echo -e "     ${DIM}Restart:   sudo systemctl restart nerve.service${NC}"
     echo -e "     ${DIM}Logs:      sudo journalctl -u nerve.service -f${NC}"
   else
-    echo -e "     ${DIM}Start:     cd ${INSTALL_DIR} && npm start${NC}"
+    echo -e "     ${DIM}Start:     cd ${INSTALL_DIR} && npm run prod${NC}"
   fi
 fi
 echo ""
