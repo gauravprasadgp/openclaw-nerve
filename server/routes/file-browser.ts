@@ -833,7 +833,7 @@ app.get('/api/files/raw', async (c) => {
     const fileStream = fsSync.createReadStream(resolved, { start, end });
     
     // Convert Node.js stream to Web Stream for Response compatibility
-    const webStream = fileStream.readable ? fileStream as any : nodeStreamToWebStream(fileStream);
+    const webStream = nodeStreamToWebStream(fileStream);
     
     const responseHeaders: Record<string, string> = {
       'Content-Type': mime,
