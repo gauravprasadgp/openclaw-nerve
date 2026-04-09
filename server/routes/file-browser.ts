@@ -806,13 +806,36 @@ app.get('/api/files/raw', async (c) => {
 
     const rangeHeaderValue = c.req.header('range');
     if (rangeHeaderValue && ext === '.pdf') {
-      const rangeMatch = rangeHeaderValue.match(/^bytes=(\d+)-(\d*)$/);
+      // Match both explicit ranges (bytes=100-200) and suffix ranges (bytes=-500)
+      const rangeMatch = rangeHeaderValue.match(/^bytes=(\d*)-(\d*)$/);
       if (rangeMatch) {
-        const rangeStart = parseInt(rangeMatch[1], 10);
-        const rangeEnd = rangeMatch[2] ? parseInt(rangeMatch[2], 10) : stat.size - 1;
+        const capturedStart = rangeMatch[1];
+        const capturedEnd = rangeMatch[2];
 
-        // Validate range
-        if (rangeStart <= rangeEnd && rangeStart >= 0 && rangeEnd < stat.size) {
+        let rangeStart = 0;
+        let rangeEnd = stat.size - 1;
+        let isValid = false;
+
+        if (capturedStart === '' && capturedEnd !== '') {
+          // Suffix-length range: bytes=-500 means last 500 bytes
+          const suffixLength = parseInt(capturedEnd, 10);
+          rangeStart = Math.max(0, stat.size - suffixLength);
+          rangeEnd = stat.size - 1;
+          isValid = suffixLength > 0;
+        } else if (capturedStart !== '' && capturedEnd === '') {
+          // Range without end: bytes=100- means from byte 100 to EOF
+          rangeStart = parseInt(capturedStart, 10);
+          rangeEnd = stat.size - 1;
+          isValid = rangeStart >= 0 && rangeStart < stat.size;
+        } else if (capturedStart !== '' && capturedEnd !== '') {
+          // Explicit range: bytes=100-200
+          rangeStart = parseInt(capturedStart, 10);
+          rangeEnd = parseInt(capturedEnd, 10);
+          isValid = rangeStart >= 0 && rangeStart <= rangeEnd && rangeEnd < stat.size;
+        }
+
+        // Validate and apply range
+        if (isValid) {
           start = rangeStart;
           end = rangeEnd;
           statusCode = 206;
@@ -831,6 +854,16 @@ app.get('/api/files/raw', async (c) => {
 
     // Stream file with optional range support
     const fileStream = fsSync.createReadStream(resolved, { start, end });
+    
+    // Add error listener to surface stream failures for easier debugging
+    fileStream.on('error', (err) => {
+      console.error('[file-browser] fileStream error:', {
+        path: resolved,
+        rangeStart: start,
+        rangeEnd: end,
+        error: (err as Error).message,
+      });
+    });
     
     // Convert Node.js stream to Web Stream using Node's built-in conversion
     const webStream = Readable.toWeb(fileStream);
