@@ -795,7 +795,6 @@ app.get('/api/files/raw', async (c) => {
     if (stat.size > maxSize) {
       return c.json({ ok: false, error: `File too large (max ${ext === '.pdf' ? '50MB' : '10MB'})` }, 413);
     }
-    }
 
     const buffer = await fs.readFile(resolved);
     return new Response(buffer, {
