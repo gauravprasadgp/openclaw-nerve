@@ -17,7 +17,9 @@
 
 import { Hono, type Context } from 'hono';
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import path from 'node:path';
+import { pipeline } from 'node:stream/promises';
 import {
   getWorkspaceRoot,
   resolveWorkspacePathForRoot,
@@ -796,8 +798,13 @@ app.get('/api/files/raw', async (c) => {
       return c.json({ ok: false, error: `File too large (max ${ext === '.pdf' ? '50MB' : '10MB'})` }, 413);
     }
 
-    const buffer = await fs.readFile(resolved);
-    return new Response(buffer, {
+    // Stream large files instead of buffering to avoid memory spikes
+    const fileStream = fsSync.createReadStream(resolved);
+    
+    // Convert Node.js stream to Web Stream for Response compatibility
+    const webStream = fileStream.readable ? fileStream as any : nodeStreamToWebStream(fileStream);
+    
+    return new Response(webStream, {
       headers: {
         'Content-Type': mime,
         'Content-Length': String(stat.size),
@@ -808,5 +815,30 @@ app.get('/api/files/raw', async (c) => {
     return c.json({ ok: false, error: 'Failed to read file' }, 500);
   }
 });
+
+/**
+ * Convert a Node.js ReadableStream to a Web Stream (ReadableStream).
+ * Handles error events and proper cleanup.
+ */
+function nodeStreamToWebStream(nodeStream: fsSync.ReadStream): ReadableStream<Uint8Array> {
+  return new ReadableStream({
+    start(controller) {
+      nodeStream.on('data', (chunk: string | Buffer) => {
+        const bytes = typeof chunk === 'string' ? Buffer.from(chunk) : chunk;
+        controller.enqueue(new Uint8Array(bytes));
+      });
+      nodeStream.on('end', () => {
+        controller.close();
+      });
+      nodeStream.on('error', (err: Error) => {
+        console.error('Stream read error:', err);
+        controller.error(err);
+      });
+    },
+    cancel(reason) {
+      nodeStream.destroy();
+    },
+  });
+}
 
 export default app;

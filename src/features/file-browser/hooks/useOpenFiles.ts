@@ -364,6 +364,27 @@ export function useOpenFiles(agentId = DEFAULT_AGENT_ID) {
         files.push(createSnapshotBackedOpenFile(path, dirtySnapshot));
       };
 
+      // Skip /api/files/read for image and PDF files; restore them directly
+      const fileName = basename(path);
+      if (isImageFile(fileName) || isPdfFile(fileName)) {
+        const dirtySnapshot = getDirtySnapshot();
+        if (dirtySnapshot) {
+          files.push(createSnapshotBackedOpenFile(path, dirtySnapshot));
+        } else {
+          files.push({
+            path,
+            name: fileName,
+            content: '',
+            savedContent: '',
+            dirty: false,
+            locked: false,
+            mtime: 0,
+            loading: false,
+          });
+        }
+        continue;
+      }
+
       try {
         const res = await fetch(buildReadUrl(path, targetAgentId));
         if (!isLatestReadRequest(scopedPathKey, token)) {

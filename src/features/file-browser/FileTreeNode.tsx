@@ -67,7 +67,7 @@ export function FileTreeNode({
     }
   };
 
-  const canOpen = !isDir && (!entry.binary || isImageFile(entry.name)) || isPdfFile(entry.name);
+  const canOpen = !isDir && (!entry.binary || isImageFile(entry.name) || isPdfFile(entry.name));
 
   const handleDoubleClick = () => {
     if (canOpen && !isRenaming) {
