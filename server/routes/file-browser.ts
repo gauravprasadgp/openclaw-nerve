@@ -748,6 +748,7 @@ const MIME_TYPES: Record<string, string> = {
   '.avif': 'image/avif',
   '.svg': 'image/svg+xml',
   '.ico': 'image/x-icon',
+  '.pdf': 'application/pdf',
 };
 
 /** Check if a file is a supported image. */
@@ -789,9 +790,11 @@ app.get('/api/files/raw', async (c) => {
     if (!stat.isFile()) {
       return c.json({ ok: false, error: 'Not a file' }, 400);
     }
-    // Cap at 10MB for images
-    if (stat.size > 10_485_760) {
-      return c.json({ ok: false, error: 'File too large (max 10MB)' }, 413);
+    // Cap at 10MB for images, 50 MB for PDFs (can adjust as needed)
+    const maxSize = ext === '.pdf' ? 52_428_800 : 10_485_760;
+    if (stat.size > maxSize) {
+      return c.json({ ok: false, error: `File too large (max ${ext === '.pdf' ? '50MB' : '10MB'})` }, 413);
+    }
     }
 
     const buffer = await fs.readFile(resolved);

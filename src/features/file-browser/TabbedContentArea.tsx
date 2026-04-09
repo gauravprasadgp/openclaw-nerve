@@ -11,7 +11,8 @@ import { Loader2, AlertTriangle, X } from 'lucide-react';
 import { EditorTabBar } from './EditorTabBar';
 import { ImageViewer } from './ImageViewer';
 import { MarkdownDocumentView } from './MarkdownDocumentView';
-import { isImageFile, isMarkdownFile } from './utils/fileTypes';
+import { PdfViewer } from './PdfViewer';
+import { isImageFile, isMarkdownFile, isPdfFile } from './utils/fileTypes';
 import type { OpenFile } from './types';
 
 // Lazy-load CodeMirror editor — keeps it out of the initial bundle
@@ -104,6 +105,8 @@ export function TabbedContentArea({
           >
             {isImageFile(file.name) ? (
               <ImageViewer file={file} agentId={workspaceAgentId} />
+            ) : isPdfFile(file.name) ? (
+              <PdfViewer file={file} agentId={workspaceAgentId} />
             ) : isMarkdownFile(file.name) ? (
               <MarkdownDocumentView
                 file={file}

@@ -57,7 +57,7 @@ function getCspDirectives(): string {
     "img-src 'self' data: blob:",
     "media-src 'self' blob:",  // Allow blob: URLs for TTS audio playback
     "frame-src https://s3.tradingview.com https://www.tradingview.com https://www.tradingview-widget.com https://s.tradingview.com",
-    "frame-ancestors 'none'",
+    "frame-ancestors 'self'",
     "base-uri 'self'",
     "form-action 'self'",
   ].join('; ');
@@ -72,7 +72,7 @@ export const securityHeaders: MiddlewareHandler = async (c, next) => {
   c.header('Content-Security-Policy', getCspDirectives());
 
   // Prevent clickjacking
-  c.header('X-Frame-Options', 'DENY');
+  c.header('X-Frame-Options', 'SAMEORIGIN');
 
   // Prevent MIME type sniffing
   c.header('X-Content-Type-Options', 'nosniff');
