@@ -755,10 +755,24 @@ export function useOpenFiles(agentId = DEFAULT_AGENT_ID) {
     const isOpen = openFilesRef.current.some((file) => file.path === changedPath);
     if (!isOpen) return;
 
+    const fileName = basename(changedPath);
+    const isRawAsset = isImageFile(fileName) || isPdfFile(fileName);
+
     setOpenFiles((prev) => prev.map((file) => (
       file.path === changedPath ? { ...file, locked: true } : file
     )));
 
+    // For raw assets (images, PDFs), bump viewerVersion to trigger iframe remount
+    if (isRawAsset) {
+      setOpenFiles((prev) => prev.map((file) => (
+        file.path === changedPath 
+          ? { ...file, viewerVersion: (file.viewerVersion ?? 0) + 1, locked: false }
+          : file
+      )));
+      return;
+    }
+
+    // For text files, reload content from disk
     void reloadFile(changedPath).then(() => {
       if (agentIdRef.current !== requestAgentId) return;
 

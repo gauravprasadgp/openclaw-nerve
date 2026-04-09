@@ -35,6 +35,7 @@ export function PdfViewer({ file, agentId }: PdfViewerProps) {
   return (
     <div className="h-full w-full bg-[#0a0a0a]">
       <iframe
+        key={`pdf-${file.path}-v${file.viewerVersion ?? 0}`}
         src={src}
         title={file.name}
         className="w-full h-full border-0"

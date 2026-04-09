@@ -798,18 +798,60 @@ app.get('/api/files/raw', async (c) => {
       return c.json({ ok: false, error: `File too large (max ${ext === '.pdf' ? '50MB' : '10MB'})` }, 413);
     }
 
-    // Stream large files instead of buffering to avoid memory spikes
-    const fileStream = fsSync.createReadStream(resolved);
+    // Parse Range header for PDFs to support partial content requests
+    let start = 0;
+    let end = stat.size - 1;
+    let statusCode = 200;
+    let rangeHeader: string | undefined;
+
+    const rangeHeaderValue = c.req.header('range');
+    if (rangeHeaderValue && ext === '.pdf') {
+      const rangeMatch = rangeHeaderValue.match(/^bytes=(\d+)-(\d*)$/);
+      if (rangeMatch) {
+        const rangeStart = parseInt(rangeMatch[1], 10);
+        const rangeEnd = rangeMatch[2] ? parseInt(rangeMatch[2], 10) : stat.size - 1;
+
+        // Validate range
+        if (rangeStart <= rangeEnd && rangeStart >= 0 && rangeEnd < stat.size) {
+          start = rangeStart;
+          end = rangeEnd;
+          statusCode = 206;
+          rangeHeader = `bytes ${start}-${end}/${stat.size}`;
+        } else {
+          // Invalid range
+          return new Response('', {
+            status: 416,
+            headers: {
+              'Content-Range': `bytes */${stat.size}`,
+            },
+          });
+        }
+      }
+    }
+
+    // Stream file with optional range support
+    const fileStream = fsSync.createReadStream(resolved, { start, end });
     
     // Convert Node.js stream to Web Stream for Response compatibility
     const webStream = fileStream.readable ? fileStream as any : nodeStreamToWebStream(fileStream);
     
+    const responseHeaders: Record<string, string> = {
+      'Content-Type': mime,
+      'Content-Length': String(end - start + 1),
+      'Cache-Control': 'no-cache',
+    };
+
+    // Add Range headers for partial content responses
+    if (ext === '.pdf') {
+      responseHeaders['Accept-Ranges'] = 'bytes';
+      if (rangeHeader) {
+        responseHeaders['Content-Range'] = rangeHeader;
+      }
+    }
+
     return new Response(webStream, {
-      headers: {
-        'Content-Type': mime,
-        'Content-Length': String(stat.size),
-        'Cache-Control': 'no-cache',
-      },
+      status: statusCode,
+      headers: responseHeaders,
     });
   } catch {
     return c.json({ ok: false, error: 'Failed to read file' }, 500);
