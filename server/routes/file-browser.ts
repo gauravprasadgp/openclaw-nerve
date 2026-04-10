@@ -809,28 +809,20 @@ app.get('/api/files/raw', async (c) => {
       // Match both explicit ranges (bytes=100-200) and suffix ranges (bytes=-500)
       const rangeMatch = rangeHeaderValue.match(/^bytes=(\d*)-(\d*)$/);
       if (rangeMatch) {
-        const capturedStart = rangeMatch[1];
-        const capturedEnd = rangeMatch[2];
-
-        let rangeStart = 0;
-        let rangeEnd = stat.size - 1;
+        const hasSuffix = rangeMatch[1] === '';
+        let rangeStart: number;
+        let rangeEnd: number;
         let isValid = false;
 
-        if (capturedStart === '' && capturedEnd !== '') {
-          // Suffix-length range: bytes=-500 means last 500 bytes
-          const suffixLength = parseInt(capturedEnd, 10);
-          rangeStart = Math.max(0, stat.size - suffixLength);
+        if (hasSuffix) {
+          // Suffix range: bytes=-500 means last 500 bytes
+          const suffixLen = parseInt(rangeMatch[2], 10);
+          rangeStart = Math.max(0, stat.size - suffixLen);
           rangeEnd = stat.size - 1;
-          isValid = suffixLength > 0;
-        } else if (capturedStart !== '' && capturedEnd === '') {
-          // Range without end: bytes=100- means from byte 100 to EOF
-          rangeStart = parseInt(capturedStart, 10);
-          rangeEnd = stat.size - 1;
-          isValid = rangeStart >= 0 && rangeStart < stat.size;
-        } else if (capturedStart !== '' && capturedEnd !== '') {
-          // Explicit range: bytes=100-200
-          rangeStart = parseInt(capturedStart, 10);
-          rangeEnd = parseInt(capturedEnd, 10);
+          isValid = suffixLen > 0;
+        } else {
+          rangeStart = parseInt(rangeMatch[1], 10);
+          rangeEnd = rangeMatch[2] ? parseInt(rangeMatch[2], 10) : stat.size - 1;
           isValid = rangeStart >= 0 && rangeStart <= rangeEnd && rangeEnd < stat.size;
         }
 
@@ -854,7 +846,10 @@ app.get('/api/files/raw', async (c) => {
 
     // Stream file with optional range support
     const fileStream = fsSync.createReadStream(resolved, { start, end });
-    
+    fileStream.on('error', (err) => {
+      console.error(`[file-browser] Stream error for ${filePath}:`, err.message);
+    });
+
     // Add error listener to surface stream failures for easier debugging
     fileStream.on('error', (err) => {
       console.error('[file-browser] fileStream error:', {
