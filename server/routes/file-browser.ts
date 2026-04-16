@@ -91,6 +91,7 @@ async function listDirectory(
   dirPath: string,
   basePath: string,
   depth: number,
+  showHidden: boolean,
 ): Promise<TreeEntry[]> {
   const entries: TreeEntry[] = [];
 
@@ -115,8 +116,8 @@ async function listDirectory(
     if (inTrash) {
       // Internal metadata file for restore bookkeeping.
       if (item.name === '.index.json') continue;
-    // FILE_BROWSER_ROOT: Show all files when custom root is set, but always hide .trash folder
-    } else if (!config.fileBrowserRoot && item.name.startsWith('.') && item.name !== '.nerveignore' && item.name !== '.trash') {
+    // Hide dotfiles unless showHidden=true, except for .nerveignore and .trash; custom roots still hide .trash.
+    } else if (!showHidden && item.name.startsWith('.') && item.name !== '.nerveignore' && item.name !== '.trash') {
       continue;
     } else if (config.fileBrowserRoot && item.name === '.trash') {
       continue;
@@ -131,7 +132,7 @@ async function listDirectory(
         path: relativePath,
         type: 'directory',
         children: depth > 1
-          ? await listDirectory(fullPath, relativePath, depth - 1)
+          ? await listDirectory(fullPath, relativePath, depth - 1, showHidden)
           : null,
       });
     } else if (item.isFile()) {
@@ -163,9 +164,13 @@ function handleFileOpError(c: Context, err: unknown) {
 }
 
 /** Convert gateway file list to TreeEntry format for the UI. */
-function gatewayFilesToTree(files: Awaited<ReturnType<typeof gatewayFilesList>>): TreeEntry[] {
+function gatewayFilesToTree(
+  files: Awaited<ReturnType<typeof gatewayFilesList>>,
+  showHidden: boolean,
+): TreeEntry[] {
   return files
     .filter((f) => !f.missing)
+    .filter((f) => showHidden || !f.name.startsWith('.') || f.name === '.nerveignore' || f.name === '.trash')
     .map((f) => ({
       name: f.name,
       path: f.name,
@@ -201,6 +206,7 @@ app.get('/api/files/tree', async (c) => {
   const root = workspace.workspaceRoot;
   const subPath = c.req.query('path') || '';
   const depth = Math.min(Math.max(Number(c.req.query('depth')) || 1, 1), 5);
+  const showHidden = c.req.query('showHidden') === 'true';
 
   // Check if workspace is local
   const isLocal = await isWorkspaceLocal(root);
@@ -228,7 +234,7 @@ app.get('/api/files/tree', async (c) => {
       targetDir = root;
     }
 
-    const entries = await listDirectory(targetDir, subPath, depth);
+    const entries = await listDirectory(targetDir, subPath, depth, showHidden);
 
     return c.json({
       ok: true,
@@ -258,7 +264,7 @@ app.get('/api/files/tree', async (c) => {
 
   try {
     const remoteFiles = await gatewayFilesList(workspace.agentId);
-    const entries = gatewayFilesToTree(remoteFiles);
+    const entries = gatewayFilesToTree(remoteFiles, showHidden);
     return c.json({
       ok: true,
       root: '.',
